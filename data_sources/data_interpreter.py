@@ -18,11 +18,11 @@ class Case_Data(object):
                 if line_count == 0:
                     line_count += 1
                 data[line_count] = {
-                "Ship": str(row["Oceanograpic Ships"]),
-                "L": float(row["L"]),
-                "B": float(row["B"]),
-                "T": float(row["T"]),
-                "Cb": float(row["Cb"])
+                    "Ship": str(row["Oceanograpic Ships"]),
+                    "L": float(row["L"]),
+                    "B": float(row["B"]),
+                    "T": float(row["T"]),
+                    "Cb": float(row["Cb"])
                 }
                 line_count += 1
             return data
@@ -30,7 +30,9 @@ class Case_Data(object):
     def calc_vols(self):
         vol_dict = {}
         for k, v in self.data.items():
-            vol_dict[k] = v['L']*v['B']*v['T']*v['Cb']
+            vol_dict[k] = {
+                "V": float(v['L']*v['B']*v['T']*v['Cb'])
+            }
         return vol_dict
 
     def calc_avg_vol_from_vols(self):
