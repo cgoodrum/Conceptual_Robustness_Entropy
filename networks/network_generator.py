@@ -2,14 +2,25 @@
 import sys
 sys.path.append('../')
 import networkx as nx
+import graphviz as gv
+import pydot
+from networkx.drawing.nx_pydot import graphviz_layout
+import math
+import pylab
+#import pygraphviz
+import matplotlib.pyplot as plt
+import dit
+from scipy.stats import entropy
 from data_sources.data_interpreter import Case_Data
+pylab.ion()
 
-## TO DO #####
 '''
-- Link the data status to the presence of data in add_attributes
-- work out the calculation of the volumes from the variables using the data_interpreter
-- implement entropy measures
-- implement visualizations
+                                    TO DO
+    - calculate value entropy
+    - fix "visualize_network_growth" (not pressing right now)
+    - build out case 1
+    - figure out how to represent binary data_status as outcomes for dit for mutual information, etc.
+    - Determine a new entropy measure combining entropy of data_status, topology, and values.
 '''
 
 class Knowledge_Network(object):
@@ -24,12 +35,105 @@ class Knowledge_Network(object):
         self.target_node = target_node
         self.time_step = time_step
         self.network = self.init_network()
+        self.topological_entropy_time_series = {}
+        self.simple_entropy_time_series = {}
+        self.graphviz_path = 'C:/Users/cgoodrum/Anaconda2/Lib/site-packages/graphviz-2.38/release/bin'
 
     def init_network(self):
         G = nx.DiGraph()
-        G.add_node(self.target_node, add_attributes('avg_vol',float(), 0))
+        G.add_node(self.target_node, **self.add_attributes('avg_vol'))
         return G
 
+    def calculate_data_status(self, node):
+        pred = self.network.predecessors(node) # Find the connected nodes to the node in question
+        status = 1.0
+        for n in pred:
+            status = status*self.network.node[n]['data_status']
+            return status
+
+    def add_attributes(self, name = '', value = None):
+        if value:
+            status = 1.0
+        else:
+            status = 0.0
+        out_dict = {
+            'node_name': name,
+            'val': value,
+            'data_status': status
+        }
+        return out_dict
+
+    def calculate_pagerank(self, alpha = 1.0):
+        pagerank = nx.pagerank(self.network, alpha = alpha)
+        return pagerank
+
+    def calculate_simple_entropy(self):
+        # A simple calculation using the data status of each data element, using the
+        # P(1) and P(0). This ignores structure of the network.
+        # Has a min value of 0, and a max value of 1
+
+        num_nodes = len(self.network.nodes())
+
+        if num_nodes <= 1:
+            return 0
+
+        sum_1 = 0.0
+        sum_0 = 0.0
+        for node in self.network.nodes(data=True):
+            data_status = node[1]['data_status']
+            if data_status == 1.0:
+                sum_1 += 1.0
+            else:
+                sum_0 += 1.0
+
+        p_1 = sum_1/float(num_nodes)
+        p_0 = sum_0/float(num_nodes)
+        p = [p_0, p_1]
+        H = entropy(p,base=2)
+        return H
+
+    def calculate_topological_entropy(self):
+        # Calculates the entropy of the network using the pagerank of each node
+        # ignoring any of the data statuses or values.
+        pagerank = self.calculate_pagerank()
+        d = dit.ScalarDistribution(pagerank)
+        entropy = dit.shannon.entropy(d)
+        return entropy
+
+    def build_entropy_time_series(self, time_series_name, entropy_function):
+        time_series_name[self.time_step] = entropy_function
+
+    def calculate_value_entropy(self):
+        # Calculates the entropy of the values of a variable based on its
+        # distribution
+        pass
+
+    def visualize_network_growth(self):
+        self.get_network()
+        pylab.draw()
+        plt.pause(0.2)
+
+    def get_network(self, prog = 'twopi',**kwargs):
+        prog = '{}/{}'.format(self.graphviz_path, prog)
+        pos = graphviz_layout(self.network, prog = prog)
+        labels = {k: self.network.nodes(data=True)[k]['node_name'] for k in self.network.nodes()}
+        nx.draw(self.network, pos, labels = labels, **kwargs)
+
+    def save_entropy_time_series_plot(self, time_series_dict, filename = 'untitled', xlabel = 'Time', ylabel = 'Entropy', title = '', x_min = 0, x_max = 15, y_min = 0, y_max=5, grid = True,**kwargs):
+        plt.figure()
+        plt.plot(time_series_dict.keys(), time_series_dict.values(), '-*b')
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.xlim(x_min,x_max)
+        plt.ylim(y_min,y_max)
+        plt.grid(grid)
+        plt.title(title)
+        plt.savefig('../figures\\' + filename +'.png')
+
+    def save_final_network_plot(self, filename = 'untitled_network', **kwargs):
+        plt.figure()
+        self.get_network(**kwargs)
+        plt.savefig('../figures\\{}.png'.format(filename))
 
 
 class Case_1(Knowledge_Network):
@@ -49,18 +153,62 @@ class Case_2(Knowledge_Network):
         self.data = data
 
     def grow(self):
+        # Add the volume node, as well as one L, B, T, and Cb node, all
+        # connected to target with associated edges. Import the associated data
+        # for the variable nodes
         new_node_label = max(self.network.nodes()) + 1
-        self.network.add_node(new_node_label, add_attributes('V'+str(self.time_step),0.0,0))
+        self.network.add_node(new_node_label, **self.add_attributes('V'+str(self.time_step)))
         self.network.add_edge(new_node_label, 0)
-        self.network.add_node(new_node_label+1, add_attributes('L'+str(self.time_step),self.data.data[self.time_step]['L'],1))
-        self.network.add_node(new_node_label+2, add_attributes('B'+str(self.time_step),self.data.data[self.time_step]['B'],1))
-        self.network.add_node(new_node_label+3, add_attributes('T'+str(self.time_step),self.data.data[self.time_step]['T'],1))
-        self.network.add_node(new_node_label+4, add_attributes('Cb'+str(self.time_step),self.data.data[self.time_step]['Cb'],1))
+        self.network.add_node(new_node_label+1, **self.add_attributes('L'+str(self.time_step),self.data.data[self.time_step]['L']))
+        self.network.add_node(new_node_label+2, **self.add_attributes('B'+str(self.time_step),self.data.data[self.time_step]['B']))
+        self.network.add_node(new_node_label+3, **self.add_attributes('T'+str(self.time_step),self.data.data[self.time_step]['T']))
+        self.network.add_node(new_node_label+4, **self.add_attributes('Cb'+str(self.time_step),self.data.data[self.time_step]['Cb']))
         self.network.add_edge(new_node_label+1, new_node_label)
         self.network.add_edge(new_node_label+2, new_node_label)
         self.network.add_edge(new_node_label+3, new_node_label)
         self.network.add_edge(new_node_label+4, new_node_label)
 
+    def calculate_non_target_values(self):
+        # For each non target node in the network with non-zero in-degree, calculate the
+        # value of the target node using the product of the values and the data statuses.
+        calc_nodes = {k:v for k,v in self.network.in_degree() if (v > 0.0 and k != self.target_node)} # Find the non target nodes with non-zero in degree to be calculated
+        pred = {k:self.network.predecessors(k) for k in calc_nodes.keys()} # Find the connected nodes to the calculated calc_nodes
+        sorted_node_list = sorted([k for k in calc_nodes.keys()], reverse=True) # Sort the calculated nodes in descending order.
+        for n in sorted_node_list:
+            val = 1.0
+            new_val = 1.0
+            for n1 in pred[n]:
+                new_val = self.network.node[n1]['val']*self.network.node[n1]['data_status']
+                val = val*new_val
+            self.network.node[n]['val'] = val
+            self.network.node[n]['data_status'] = self.calculate_data_status(n)
+            #print self.network.node[n]
+
+    def calculate_target_node(self):
+        # Calculate the target node (average volume) given the nodes it is connected to in the
+        # knowledge network using their values and data statuses
+        pred = list(self.network.predecessors(self.target_node)) # Find the connected nodes to the target node
+        val = 0.0
+        status_val = 1.0
+        for n in pred:
+            val += self.network.node[n]['val']
+            status_val = status_val*self.network.node[n]['data_status']
+        val = status_val*val/float(len(pred))
+        self.network.node[self.target_node]['val'] = val
+        self.network.node[self.target_node]['data_status'] = self.calculate_data_status(self.target_node)
+        #print self.network.node[self.target_node]
+
+    def run(self, T = 14, **kwargs):
+        # Runs the case forwards (building the knowledge network)
+        self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
+        self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
+        for i in range(1,T+1):
+            self.time_step+=1
+            self.grow()
+            self.calculate_non_target_values()
+            self.calculate_target_node()
+            self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
+            self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
 
 class Case_3(Knowledge_Network):
     # This case only imports the volumes associated with each ship, without
@@ -69,33 +217,63 @@ class Case_3(Knowledge_Network):
     def __init__(self, **kwargs):
         Knowledge_Network.__init__(self, **kwargs)
 
-############## Global functions ############
-def add_attributes(name = '', value = float(), status=0):
-    out_dict = {
-    'name': name,
-    'val': value,
-    'data_status': status
-    }
-    return out_dict
 
 
-############################################
+
+###############################################################################
 def main():
+
+    save_images = False # should the images be saved?
+
     # Import the data
     data = Case_Data('../data_sources\\case_data.csv')
 
+    ##################### CASE 2 #######################
+    # Initialize Case 2
     case2 = Case_2(data = data)
-    #print case2.data.data
-    for i in range(1,15):
-        case2.time_step += 1
-        case2.grow()
-        print case2.network.nodes(data = True)
-        print ""
-        #print case2.network.edges()
+
+    # Run Case 2 forwards
+    case2.run(T = 14)
+
+    if save_images:
+        # Plot time series and save file in figures directory
+        case2.save_entropy_time_series_plot(
+            case2.topological_entropy_time_series,
+            filename ='case2_topological_entropy_time_series',
+            title = 'case2_topological_entropy_time_series',
+            x_min = 0,
+            x_max = 14,
+            y_min = 0,
+            y_max = 5,
+            grid = True
+        )
+
+        case2.save_entropy_time_series_plot(
+            case2.simple_entropy_time_series,
+            filename ='case2_simple_entropy_time_series',
+            title = 'case2_simple_entropy_time_series',
+            x_min = 0,
+            x_max = 14,
+            y_min = 0,
+            y_max = 5,
+            grid = True
+        )
+
+        # Plot final network layout
+        case2.save_final_network_plot(
+            filename = "case2_final_network",
+            prog = 'twopi',
+            with_labels = True,
+            font_weight = 'normal',
+            font_size = 10,
+            node_size = 120,
+            node_color = 'blue',
+            alpha = 0.6,
+            arrowstyle = '->',
+            arrowsize = 10
+        )
 
 
-    #print test.network.nodes(data=True)
-    #print max(test.network.nodes())
 
 if __name__ == '__main__':
     main()
