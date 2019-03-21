@@ -33,7 +33,8 @@ class Case_Data(object):
             vol_dict[k] = {
                 "V": float(v['L']*v['B']*v['T']*v['Cb'])
             }
-        return vol_dict
+        self.data = vol_dict
+        return self.data
 
     def calc_avg_vol_from_vols(self):
         vols = self.calc_vols()
