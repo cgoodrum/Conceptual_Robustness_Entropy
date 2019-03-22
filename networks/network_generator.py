@@ -7,6 +7,7 @@ import pydot
 from networkx.drawing.nx_pydot import graphviz_layout
 import math
 import pylab
+import itertools
 #import pygraphviz
 import matplotlib.pyplot as plt
 import dit
@@ -16,8 +17,10 @@ pylab.ion()
 
 '''
                                     TO DO
-    - calculate value entropy
-    - determine how to track entropy towards target over time
+    - Conduct back propagation for rework
+    - Expand the calculate_binary_entropy to the whole network, rather than just individual nodes.
+    - determine how to track binary entropy towards target over time
+    - Do Case 4
     - fix "visualize_network_growth" (not pressing right now)
     - figure out how to represent binary data_status as outcomes for dit for mutual information, etc.
     - Determine a new entropy measure combining entropy of data_status, topology, and values.
@@ -37,6 +40,8 @@ class Knowledge_Network(object):
         self.network = self.init_network()
         self.topological_entropy_time_series = {}
         self.simple_entropy_time_series = {}
+        self.binary_entropy_time_series = {}
+        self.target_value_entropy_time_series = {}
         self.graphviz_path = 'C:/Users/cgoodrum/Anaconda2/Lib/site-packages/graphviz-2.38/release/bin'
 
     def init_network(self):
@@ -68,6 +73,27 @@ class Knowledge_Network(object):
     def calculate_pagerank(self, alpha = 0.9):
         pagerank = nx.pagerank(self.network, alpha = alpha)
         return pagerank
+
+    def calculate_outcome_probs(self, node):
+        n = len(self.calculate_binary_outcomes(node)) # Find the connected nodes to the target node
+        return [1.0/float(n)]*n
+
+    def calculate_binary_entropy(self, node):
+        temp = dit.Distribution(self.calculate_binary_outcomes(node), self.calculate_outcome_probs(node))
+        entropy = dit.shannon.entropy(temp)
+        return entropy
+
+        #print dit.other.cumulative_residual_entropy(temp)
+
+        #print dit.multivariate.gk_common_information(temp)
+        #print temp
+        #print dit.profiles.ExtropyPartition(temp)
+        #print dit.other.perplexity(temp)
+        #print dit.profiles.ShannonPartition(temp)
+        #print dit.profiles.DependencyDecomposition(temp)
+        # plt.figure()
+        # dit.profiles.SchneidmanProfile(temp).draw()
+        # plt.savefig('../figures\\' + 'case2_Schneidman_Profile_test' +'.png')
 
     def calculate_simple_entropy(self):
         # A simple calculation using the data status of each data element, using the
@@ -102,13 +128,51 @@ class Knowledge_Network(object):
         entropy = dit.shannon.entropy(d)
         return entropy
 
+    def calculate_target_value_entropy(self, method = "shannon", **kwargs):
+        # Calculates the entropy of the values of the target node based on its
+        # distribution
+
+        def value_shannon_entropy(node, **kwargs):
+            pred = list(self.network.predecessors(node)) # Find the connected nodes
+            pred = sorted([k for k in pred], reverse=True) # Sort the calculated nodes in descending order.
+            values = []
+            for n in pred:
+                values.append(self.network.node[n]['val'])
+            #plt.figure()
+            histogram_data = plt.hist(values, **kwargs)
+            #plt.show()
+            #plt.pause(1)
+            probs = histogram_data[0]
+            H = entropy(probs, base = 2)
+            return H
+
+        def value_CRE_entropy(node, **kwargs):
+            pred = list(self.network.predecessors(node)) # Find the connected nodes
+            pred = sorted([k for k in pred], reverse=True) # Sort the calculated nodes in descending order.
+            values = []
+            for n in pred:
+                values.append(self.network.node[n]['val'])
+            #plt.figure()
+            histogram_data = plt.hist(values, **kwargs)
+            #plt.show()
+            #plt.pause(1)
+            bins = histogram_data[1][1:]
+            probs = histogram_data[0]*(bins[1]-bins[0])
+
+            d = dit.ScalarDistribution(bins,probs)
+            H = dit.other.cumulative_residual_entropy(d)
+            return H
+
+        node = self.target_node
+        value_entropy = {
+        "shannon": value_shannon_entropy(node, **kwargs),
+        "CRE": value_CRE_entropy(node, **kwargs)
+        # Could add more entropy measures if required!
+        }
+        return value_entropy[method]
+
     def build_entropy_time_series(self, time_series_name, entropy_function):
         time_series_name[self.time_step] = entropy_function
-
-    def calculate_value_entropy(self):
-        # Calculates the entropy of the values of a variable based on its
-        # distribution
-        pass
 
     def visualize_network_growth(self):
         self.get_network()
@@ -238,6 +302,7 @@ class Case_1(Knowledge_Network):
                 self.grow()
             self.calculate_non_target_values()
             self.calculate_target_value()
+
             self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
             self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
 
@@ -293,6 +358,23 @@ class Case_2(Knowledge_Network):
         self.network.node[self.target_node]['val'] = val
         self.network.node[self.target_node]['data_status'] = self.calculate_data_status(self.target_node)
 
+    def calculate_binary_outcomes(self, node):
+
+        #For given node, enumerate all possible combinations of input data_statuses.
+        pred = list(self.network.predecessors(node)) # Find the connected nodes to the target node
+        n = len(pred)
+        binary_inputs = ["".join(seq) for seq in itertools.product("01", repeat=n)] # create list of binary outcomes for inputs
+        binary_io = []
+
+        # Add logic for node data status based on input data statuses
+        for s in binary_inputs:
+            if '0' in s:
+                binary_io.append("0{}".format(s))
+            else:
+                binary_io.append("1{}".format(s))
+
+        return binary_io
+
     def run(self, T = 14):
         # Runs the case forwards (building the knowledge network)
         self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
@@ -302,6 +384,18 @@ class Case_2(Knowledge_Network):
             self.grow()
             self.calculate_non_target_values()
             self.calculate_target_value()
+
+            self.build_entropy_time_series(
+                self.target_value_entropy_time_series,
+                self.calculate_target_value_entropy(
+                    method = "CRE",
+                    bins= 10,
+                    range= (1000,15000),
+                    normed = True,
+                    cumulative = False
+                )
+            )
+
             self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
             self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
 
@@ -341,6 +435,16 @@ class Case_3(Knowledge_Network):
             self.time_step+=1
             self.grow()
             self.calculate_target_value()
+            self.build_entropy_time_series(
+                self.target_value_entropy_time_series,
+                self.calculate_target_value_entropy(
+                    method = "CRE",
+                    bins= 10,
+                    range= (1000,15000),
+                    normed = True,
+                    cumulative = False
+                )
+            )
             self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
             self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
 
@@ -348,46 +452,103 @@ class Case_3(Knowledge_Network):
 ###############################################################################
 def main():
 
-    save_images = False # should the images be saved?
+    save_images = True # should the images be saved?
 
     # Import the data
     raw_data = Case_Data('../data_sources\\case_data.csv')
 
 
-    ##################### CASE 1 #######################
+    # ##################### CASE 1 #######################
+    # # Initialize Case 2
+    # case1 = Case_1(data = raw_data)
+    #
+    # # Run Case 2 forwards
+    # case1.run(T = 5)
+    #
+    # if save_images:
+    #     # Plot time series and save file in figures directory
+    #     case1.save_entropy_time_series_plot(
+    #         case1.topological_entropy_time_series,
+    #         filename ='case1_topological_entropy_time_series',
+    #         title = 'case1_topological_entropy_time_series',
+    #         x_min = 0,
+    #         x_max = 5,
+    #         y_min = 0,
+    #         y_max = 5,
+    #         grid = True
+    #     )
+    #
+    #     case1.save_entropy_time_series_plot(
+    #         case1.simple_entropy_time_series,
+    #         filename ='case1_simple_entropy_time_series',
+    #         title = 'case1_simple_entropy_time_series',
+    #         x_min = 0,
+    #         x_max = 5,
+    #         y_min = 0,
+    #         y_max = 5,
+    #         grid = True
+    #     )
+    #
+    #     # Plot final network layout
+    #     case1.save_final_network_plot(
+    #         filename = "case1_final_network",
+    #         prog = 'twopi',
+    #         with_labels = True,
+    #         font_weight = 'normal',
+    #         font_size = 10,
+    #         node_size = 120,
+    #         node_color = 'blue',
+    #         alpha = 0.6,
+    #         arrowstyle = '->',
+    #         arrowsize = 10
+    #     )
+
+
+    ##################### CASE 2 #######################
     # Initialize Case 2
-    case1 = Case_1(data = raw_data)
+    case2 = Case_2(data = raw_data)
 
     # Run Case 2 forwards
-    case1.run(T = 5)
+    case2.run(T = 14)
 
     if save_images:
         # Plot time series and save file in figures directory
-        case1.save_entropy_time_series_plot(
-            case1.topological_entropy_time_series,
-            filename ='case1_topological_entropy_time_series',
-            title = 'case1_topological_entropy_time_series',
+        case2.save_entropy_time_series_plot(
+            case2.topological_entropy_time_series,
+            filename ='case2_topological_entropy_time_series',
+            title = 'case2_topological_entropy_time_series',
             x_min = 0,
-            x_max = 5,
+            x_max = 14,
             y_min = 0,
             y_max = 5,
             grid = True
         )
 
-        case1.save_entropy_time_series_plot(
-            case1.simple_entropy_time_series,
-            filename ='case1_simple_entropy_time_series',
-            title = 'case1_simple_entropy_time_series',
+        case2.save_entropy_time_series_plot(
+            case2.simple_entropy_time_series,
+            filename ='case2_simple_entropy_time_series',
+            title = 'case2_simple_entropy_time_series',
             x_min = 0,
-            x_max = 5,
+            x_max = 14,
             y_min = 0,
             y_max = 5,
+            grid = True
+        )
+
+        case2.save_entropy_time_series_plot(
+            case2.target_value_entropy_time_series,
+            filename ='case2_target_value_entropy_time_series_CRE',
+            title = 'case2_target_value_entropy_time_series (CRE)',
+            x_min = 0,
+            x_max = 14,
+            y_min = 0,
+            y_max = None,
             grid = True
         )
 
         # Plot final network layout
-        case1.save_final_network_plot(
-            filename = "case1_final_network",
+        case2.save_final_network_plot(
+            filename = "case2_final_network",
             prog = 'twopi',
             with_labels = True,
             font_weight = 'normal',
@@ -400,53 +561,7 @@ def main():
         )
 
 
-    # ##################### CASE 2 #######################
-    # # Initialize Case 2
-    # case2 = Case_2(data = raw_data)
-    #
-    # # Run Case 2 forwards
-    # case2.run(T = 14)
-    #
-    # if save_images:
-    #     # Plot time series and save file in figures directory
-    #     case2.save_entropy_time_series_plot(
-    #         case2.topological_entropy_time_series,
-    #         filename ='case2_topological_entropy_time_series',
-    #         title = 'case2_topological_entropy_time_series',
-    #         x_min = 0,
-    #         x_max = 14,
-    #         y_min = 0,
-    #         y_max = 5,
-    #         grid = True
-    #     )
-    #
-    #     case2.save_entropy_time_series_plot(
-    #         case2.simple_entropy_time_series,
-    #         filename ='case2_simple_entropy_time_series',
-    #         title = 'case2_simple_entropy_time_series',
-    #         x_min = 0,
-    #         x_max = 14,
-    #         y_min = 0,
-    #         y_max = 5,
-    #         grid = True
-    #     )
-    #
-    #     # Plot final network layout
-    #     case2.save_final_network_plot(
-    #         filename = "case2_final_network",
-    #         prog = 'twopi',
-    #         with_labels = True,
-    #         font_weight = 'normal',
-    #         font_size = 10,
-    #         node_size = 120,
-    #         node_color = 'blue',
-    #         alpha = 0.6,
-    #         arrowstyle = '->',
-    #         arrowsize = 10
-    #     )
-    #
-    #
-    #
+
     # ############################ CASE 3 ###############################
     # # Initialize Case 3
     # case3_data = raw_data.calc_vols()
@@ -478,6 +593,17 @@ def main():
     #         x_max = 14,
     #         y_min = 0,
     #         y_max = 5,
+    #         grid = True
+    #     )
+    #
+    #     case3.save_entropy_time_series_plot(
+    #         case3.target_value_entropy_time_series,
+    #         filename ='case3_target_value_entropy_time_series_CRE',
+    #         title = 'case3_target_value_entropy_time_series (CRE)',
+    #         x_min = 0,
+    #         x_max = 14,
+    #         y_min = 0,
+    #         y_max = None,
     #         grid = True
     #     )
     #
