@@ -15,12 +15,15 @@ from scipy.stats import entropy
 from data_sources.data_interpreter import Case_Data
 import time
 from collections import defaultdict
+import logging
 
-pylab.ion()
+logger = logging.getLogger(__name__)
+logging.basicConfig(stream=sys.stdout, format = '%(levelname)s:%(message)s', level=logging.INFO)
+#pylab.ion()
 
 '''
                                     TO DO
-    - Conduct back propagation for rework
+    - Conduct back propagation for unlabelled case (Case 1)
     - Add calculate_binary_outcomes() to Case 1 and Case 3
     - Expand the calculate_binary_entropy to the whole network, rather than just individual nodes.
     - determine how to track binary entropy towards target over time
@@ -295,14 +298,15 @@ class Case_1(Knowledge_Network):
         self.network.node[self.target_node]['val'] = val
         self.network.node[self.target_node]['data_status'] = self.calculate_data_status(self.target_node)
 
-    def remove_bad_ship_labelled(self):
+    def remove_bad_ship_labelled(self, print_output = False):
         # Start the timer
         start_time = time.clock()
 
-        print ""
-        print "Case 1:"
-        print ""
-        print "Initial val:", self.network.node[0]['val']
+        if print_output:
+            print ""
+            print "Case 1:"
+            print ""
+            print "Initial val:", self.network.node[0]['val']
 
         # Re-organize the data to calculate a volume for each ship
         pred = list(self.network.predecessors(self.target_node)) # Find the connected nodes to the target node
@@ -344,12 +348,14 @@ class Case_1(Knowledge_Network):
         self.calculate_non_target_values()
         self.calculate_target_value()
 
-        print "Final val:", self.network.node[0]['val']
+        if print_output:
+            print "Final val:", self.network.node[0]['val']
 
         # Stop timer
         end_time = time.clock()
         elapsed_time = end_time - start_time
-        print "Time Elapsed:", elapsed_time
+        if print_output:
+            print "Time Elapsed:", elapsed_time
 
         self.rework_time = elapsed_time
 
@@ -438,14 +444,15 @@ class Case_2(Knowledge_Network):
 
         return binary_io
 
-    def remove_bad_ship(self):
+    def remove_bad_ship(self, print_output = False):
         # Start the timer
         start_time = time.clock()
 
-        print ""
-        print "Case 2:"
-        print ""
-        print "Initial val:", self.network.node[0]['val']
+        if print_output:
+            print ""
+            print "Case 2:"
+            print ""
+            print "Initial val:", self.network.node[0]['val']
 
         # Find and remove the bad nodes and edges
         pred = list(self.network.predecessors(self.target_node)) # Find the connected nodes to the target node
@@ -464,12 +471,14 @@ class Case_2(Knowledge_Network):
         # Re-calculate the target node
         self.calculate_target_value()
 
-        print "Final val:", self.network.node[0]['val']
+        if print_output:
+            print "Final val:", self.network.node[0]['val']
 
         # Stop timer
         end_time = time.clock()
         elapsed_time = end_time - start_time
-        print "Time Elapsed:", elapsed_time
+        if print_output:
+            print "Time Elapsed:", elapsed_time
 
         self.rework_time = elapsed_time
 
@@ -483,16 +492,16 @@ class Case_2(Knowledge_Network):
             self.calculate_non_target_values()
             self.calculate_target_value()
 
-            self.build_entropy_time_series(
-                self.target_value_entropy_time_series,
-                self.calculate_target_value_entropy(
-                    method = "CRE",
-                    bins= 10,
-                    range= (1000,15000),
-                    normed = True,
-                    cumulative = False
-                )
-            )
+            # self.build_entropy_time_series(
+            #     self.target_value_entropy_time_series,
+            #     self.calculate_target_value_entropy(
+            #         method = "CRE",
+            #         bins= 10,
+            #         range= (1000,15000),
+            #         normed = True,
+            #         cumulative = False
+            #     )
+            # )
 
             self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
             self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
@@ -561,16 +570,18 @@ class Case_3(Knowledge_Network):
             self.time_step+=1
             self.grow()
             self.calculate_target_value()
-            self.build_entropy_time_series(
-                self.target_value_entropy_time_series,
-                self.calculate_target_value_entropy(
-                    method = "CRE",
-                    bins= 10,
-                    range= (1000,15000),
-                    normed = True,
-                    cumulative = False
-                )
-            )
+
+            # self.build_entropy_time_series(
+            #     self.target_value_entropy_time_series,
+            #     self.calculate_target_value_entropy(
+            #         method = "CRE",
+            #         bins= 10,
+            #         range= (1000,15000),
+            #         normed = True,
+            #         cumulative = False
+            #     )
+            # )
+
             self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
             self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
 
@@ -758,6 +769,58 @@ def main():
     #         arrowstyle = '->',
     #         arrowsize = 10
     #     )
+
+
+    ## Running Statistics on computation times
+
+    # CASE 1
+    # num_trials = 100
+    # filename = "../results\\case1_rework_time_data.csv"
+    # case1_rework_times = {}
+    #
+    # for i in range(num_trials):
+    #     case1 = Case_1(data = raw_data)
+    #     case1.run()
+    #     case1.remove_bad_ship_labelled()
+    #     case1_rework_times[i] = case1.rework_time
+    #     logging.info(' Iteration {}, Value: {}'.format(i, case1.rework_time))
+    #
+    # with open(filename, 'w') as f:
+    #     for key in case1_rework_times.keys():
+    #         f.write("{},{}\n".format(key, case1_rework_times[key]))
+
+
+    # # CASE 2
+    # filename = "../results\\case2_rework_time_data.csv"
+    # case2_rework_times = {}
+    #
+    # for i in range(num_trials):
+    #     case2 = Case_2(data = raw_data)
+    #     case2.run(T=14)
+    #     case2.remove_bad_ship()
+    #     case2_rework_times[i] = case2.rework_time
+    #     logging.info(' Iteration {}, Value: {}'.format(i, case2.rework_time))
+    #
+    # with open(filename, 'w') as f:
+    #     for key in case2_rework_times.keys():
+    #         f.write("{},{}\n".format(key, case2_rework_times[key]))
+
+    # # CASE 3
+    # filename = "../results\\case3_rework_time_data.csv"
+    # case3_rework_times = {}
+    # case3_data = raw_data.calc_vols()
+    #
+    # for i in range(num_trials):
+    #     case3 = Case_3(data = case3_data)
+    #     case3.run()
+    #     case3.remove_bad_ship()
+    #     case3_rework_times[i] = case3.rework_time
+    #     logging.info(' Iteration {}, Value: {}'.format(i, case3.rework_time))
+    #
+    # with open(filename, 'w') as f:
+    #     for key in case3_rework_times.keys():
+    #         f.write("{},{}\n".format(key, case3_rework_times[key]))
+
 
 
 if __name__ == '__main__':
