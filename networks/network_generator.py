@@ -18,6 +18,7 @@ from collections import defaultdict
 import logging
 import seaborn as sns
 import random as rd
+import numpy as np
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, format = '%(levelname)s:%(message)s', level=logging.INFO)
@@ -25,7 +26,9 @@ logging.basicConfig(stream=sys.stdout, format = '%(levelname)s:%(message)s', lev
 
 '''
                                     TO DO
-    - Conduct back propagation for unlabelled case (Case 1)
+    - Look at the case of removing the second largest volume ship.
+        - The time series should be the same across the cases, but the probability of selecting the correct ship should change
+        significantly. Track the probability of selecting the correct ship for each of the cases.
     - Add calculate_binary_outcomes() to Case 1 and Case 3
     - Expand the calculate_binary_entropy to the whole network, rather than just individual nodes.
     - determine how to track binary entropy towards target over time
@@ -50,7 +53,8 @@ class Knowledge_Network(object):
         self.topological_entropy_time_series = {}
         self.simple_entropy_time_series = {}
         self.binary_entropy_time_series = {}
-        self.target_value_entropy_time_series = {}
+        self.target_value_shannon_entropy_time_series = {}
+        self.target_value_CRE_entropy_time_series = {}
         self.graphviz_path = 'C:/Users/cgoodrum/Anaconda2/Lib/site-packages/graphviz-2.38/release/bin'
 
     def init_network(self):
@@ -92,18 +96,6 @@ class Knowledge_Network(object):
         entropy = dit.shannon.entropy(temp)
         return entropy
 
-        #print dit.other.cumulative_residual_entropy(temp)
-
-        #print dit.multivariate.gk_common_information(temp)
-        #print temp
-        #print dit.profiles.ExtropyPartition(temp)
-        #print dit.other.perplexity(temp)
-        #print dit.profiles.ShannonPartition(temp)
-        #print dit.profiles.DependencyDecomposition(temp)
-        # plt.figure()
-        # dit.profiles.SchneidmanProfile(temp).draw()
-        # plt.savefig('../figures\\' + 'case2_Schneidman_Profile_test' +'.png')
-
     def calculate_simple_entropy(self):
         # A simple calculation using the data status of each data element, using the
         # P(1) and P(0). This ignores structure of the network.
@@ -142,30 +134,13 @@ class Knowledge_Network(object):
         # distribution
 
         def value_shannon_entropy(node, **kwargs):
-            pred = list(self.network.predecessors(node)) # Find the connected nodes
-            pred = sorted([k for k in pred], reverse=True) # Sort the calculated nodes in descending order.
-            values = []
-            for n in pred:
-                values.append(self.network.node[n]['val'])
-            #plt.figure()
-            histogram_data = plt.hist(values, **kwargs)
-            #plt.show()
-            #plt.pause(1)
+            histogram_data, values = self.get_histogram_data(node, **kwargs)
             probs = histogram_data[0]
             H = entropy(probs, base = 2)
             return H
 
         def value_CRE_entropy(node, **kwargs):
-            pred = list(self.network.predecessors(node)) # Find the connected nodes
-            pred = sorted([k for k in pred], reverse=True) # Sort the calculated nodes in descending order.
-            #pred = rd.shuffle(pred)
-            values = []
-            for n in pred:
-                values.append(self.network.node[n]['val'])
-            #plt.figure()
-            histogram_data = plt.hist(values, **kwargs)
-            #plt.show()
-            #plt.pause(1)
+            histogram_data, values = self.get_histogram_data(node, **kwargs)
             bins = histogram_data[1][1:]
             probs = histogram_data[0]*(bins[1]-bins[0])
 
@@ -180,6 +155,16 @@ class Knowledge_Network(object):
             # Could add more entropy measures if required!
         }
         return value_entropy[method]
+
+    def get_histogram_data(self, node, **kwargs):
+        pred = list(self.network.predecessors(node)) # Find the connected nodes
+        pred = sorted([k for k in pred], reverse=True) # Sort the calculated nodes in descending order.
+        values = []
+        for n in pred:
+            values.append(self.network.node[n]['val'])
+        histogram_data = plt.hist(values, **kwargs)
+        plt.close()
+        return histogram_data, values
 
     def build_entropy_time_series(self, time_series_name, entropy_function):
         time_series_name[self.time_step] = entropy_function
@@ -214,6 +199,30 @@ class Knowledge_Network(object):
         self.get_network(**kwargs)
         plt.savefig('../figures\\{}.png'.format(filename))
 
+    def save_target_value_histogram_plot(self, filename = None, label = '', **kwargs):
+
+        data, values = self.get_histogram_data(
+            node = self.target_node,
+            **kwargs['hist_kwargs']
+        )
+
+        plt.figure()
+        sns.set()
+        sns.set_style('white')
+        sns.distplot(values, bins = kwargs['hist_kwargs']['bins'], label = label, **kwargs['plot_kwargs'])
+        sns.despine()
+        plt.legend(loc='upper right')
+        plt.xlabel('Volume')
+        plt.ylabel('Probability Density')
+        plt.title('Histogram of Target Values')
+        axes = plt.gca()
+        axes.set_xlim([kwargs['hist_kwargs']['range'][0],kwargs['hist_kwargs']['range'][1]])
+        axes.set_ylim([None,None])
+        if filename:
+            plt.savefig('../figures\\{}.png'.format(filename))
+        else:
+            plt.show()
+
     def grow(self):
         raise NotImplementedError
 
@@ -221,7 +230,7 @@ class Knowledge_Network(object):
         raise NotImplementedError
 
 class Case_1(Knowledge_Network):
-    # This case computes the averages for each varaible, then multiplies them
+    # This case computes the averages for each variable, then multiplies them
     # together to get the average volume.
 
     def __init__(self, data = {}, **kwargs):
@@ -392,6 +401,11 @@ class Case_1(Knowledge_Network):
         for k,v in val_list.items():
             vol_dict[k] = v[0]*v[1]*v[2]*v[3]
 
+        count = 1
+        for k in sorted(vol_dict.values(), reverse = True):
+            print count, k
+            count += 1
+
         # Find the largest value for removal
         bad_nodes = list(max(vol_dict, key=vol_dict.get)) # Find the node value of the bad ship (largest volume)
 
@@ -415,7 +429,7 @@ class Case_1(Knowledge_Network):
 
         self.rework_time = elapsed_time
 
-    def run(self, T=5):
+    def run(self, T=5, **kwargs):
         # Runs the case forwards (building the knowledge network)
         self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
         self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
@@ -538,7 +552,7 @@ class Case_2(Knowledge_Network):
 
         self.rework_time = elapsed_time
 
-    def run(self, T = 14):
+    def run(self, T = 14, **kwargs):
         # Runs the case forwards (building the knowledge network)
         self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
         self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
@@ -548,16 +562,24 @@ class Case_2(Knowledge_Network):
             self.calculate_non_target_values()
             self.calculate_target_value()
 
+            hist_kwargs = kwargs['hist_kwargs']
+
             self.build_entropy_time_series(
-                self.target_value_entropy_time_series,
+                self.target_value_shannon_entropy_time_series,
                 self.calculate_target_value_entropy(
                     method = "shannon",
-                    bins= 10,
-                    range= (1000,15000),
-                    normed = True,
-                    cumulative = False
+                    **hist_kwargs
                 )
             )
+
+            self.build_entropy_time_series(
+                self.target_value_CRE_entropy_time_series,
+                self.calculate_target_value_entropy(
+                    method = "CRE",
+                    **hist_kwargs
+                )
+            )
+
 
             self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
             self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
@@ -626,7 +648,7 @@ class Case_3(Knowledge_Network):
 
         self.rework_time = elapsed_time
 
-    def run(self, T=14):
+    def run(self, T=14, **kwargs):
         # Runs the case forwards (building the knowledge network)
         self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
         self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
@@ -635,14 +657,21 @@ class Case_3(Knowledge_Network):
             self.grow()
             self.calculate_target_value()
 
+            hist_kwargs = kwargs['hist_kwargs']
+
             self.build_entropy_time_series(
-                self.target_value_entropy_time_series,
+                self.target_value_shannon_entropy_time_series,
                 self.calculate_target_value_entropy(
                     method = "shannon",
-                    bins= 10,
-                    range= (1000,15000),
-                    normed = True,
-                    cumulative = False
+                    **hist_kwargs
+                )
+            )
+
+            self.build_entropy_time_series(
+                self.target_value_CRE_entropy_time_series,
+                self.calculate_target_value_entropy(
+                    method = "CRE",
+                    **hist_kwargs
                 )
             )
 
@@ -655,7 +684,7 @@ class Case_4(Knowledge_Network):
         Knowledge_Network.__init__(self, **kwargs)
         #self.network = self.init_network()
         self.data = data
-        self.average_vol_data = []
+        self.average_vol_data = {}
 
     def grow(self):
         # Add the average L, B, T, and Cb nodes, as well as {X1...Xn} for each,
@@ -722,35 +751,13 @@ class Case_4(Knowledge_Network):
         # distribution
 
         def value_shannon_entropy(node, **kwargs):
-            pred = list(self.network.predecessors(node)) # Find the connected nodes
-            pred = sorted([k for k in pred], reverse=True) # Sort the calculated nodes in descending order.
-            value = 1.0
-            for n in pred:
-                value = self.network.node[n]['val']*value
-            self.average_vol_data.append(value)
-
-            #plt.figure()
-            histogram_data = plt.hist(self.average_vol_data, **kwargs)
-            #plt.show()
-            #plt.pause(1)
+            histogram_data, values = self.get_histogram_data(node, **kwargs)
             probs = histogram_data[0]
             H = entropy(probs, base = 2)
             return H
 
         def value_CRE_entropy(node, **kwargs):
-            pred = list(self.network.predecessors(node)) # Find the connected nodes
-            pred = sorted([k for k in pred], reverse=True) # Sort the calculated nodes in descending order.
-            #pred = rd.shuffle(pred)
-            value = 1.0
-            for n in pred:
-                value = self.network.node[n]['val']*value
-            self.average_vol_data.append(value)
-            #print values
-            #plt.figure()
-            histogram_data = plt.hist(self.average_vol_data, **kwargs)
-            #print histogram_data
-            #plt.show()
-            #plt.pause(1)
+            histogram_data, values = self.get_histogram_data(node, target_values = self.average_vol_data, **kwargs)
             bins = histogram_data[1][1:]
             probs = histogram_data[0]*(bins[1]-bins[0])
 
@@ -766,7 +773,18 @@ class Case_4(Knowledge_Network):
         }
         return value_entropy[method]
 
-    def run(self, T=15):
+    def get_histogram_data(self, node, target_values = {}, **kwargs):
+        pred = list(self.network.predecessors(node)) # Find the connected nodes
+        pred = sorted([k for k in pred], reverse=True) # Sort the calculated nodes in descending order.
+        value = 1.0
+        for n in pred:
+            value = self.network.node[n]['val']*value
+        target_values[self.time_step] = value
+        histogram_data = plt.hist(target_values.values(), **kwargs)
+        plt.close()
+        return histogram_data, target_values.values()
+
+    def run(self, T=15, **kwargs):
         # Runs the case forwards (building the knowledge network)
         self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
         self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
@@ -779,20 +797,26 @@ class Case_4(Knowledge_Network):
                 self.calculate_non_target_values()
                 self.calculate_target_value()
 
+                hist_kwargs = kwargs['hist_kwargs']
+
                 self.build_entropy_time_series(
-                    self.target_value_entropy_time_series,
+                    self.target_value_shannon_entropy_time_series,
                     self.calculate_target_value_entropy(
                         method = "shannon",
-                        bins= 10,
-                        range= (1000,15000), #(1000,3500),
-                        normed = True,
-                        cumulative = False
+                        **hist_kwargs
+                    )
+                )
+
+                self.build_entropy_time_series(
+                    self.target_value_CRE_entropy_time_series,
+                    self.calculate_target_value_entropy(
+                        method = "CRE",
+                        **hist_kwargs
                     )
                 )
 
             self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
             self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
-
 
 ############################# GLOBAL FUNCTIONS ################################
 def save_entropy_comparison_plots(case_time_series_dict, filename = 'untitled', xlabel = 'Time', ylabel = 'Entropy', title = '', x_min = 0, x_max = 15, y_min = -0.1, y_max=5, grid = True,**kwargs):
@@ -800,8 +824,6 @@ def save_entropy_comparison_plots(case_time_series_dict, filename = 'untitled', 
     sns.set()
     sns.set_style('white')
     for k,v in case_time_series_dict.items():
-        # print k
-        # print v
         plt.plot(v.keys(), v.values(), label = 'Case {}'.format(k))
     sns.despine()
     plt.legend(loc='lower right')
@@ -812,317 +834,347 @@ def save_entropy_comparison_plots(case_time_series_dict, filename = 'untitled', 
     plt.grid(grid)
     plt.title(title)
     plt.savefig('../figures\\' + filename +'.png')
+
+def save_histogram_comparison_plots(case_histograms, filename = 'untitled', xlabel = 'Volume', ylabel = 'PDF', title = '', x_min = 0, x_max = 15, y_min = -0.1, y_max=5, grid = True,**kwargs):
+    plt.figure()
+    sns.set()
+    sns.set_style('white')
+    for k,v in case_histograms.items():
+        sns.distplot(v[1], bins = kwargs['hist_kwargs']['bins'], label = 'Case {}'.format(k), **kwargs['plot_kwargs'])
+    sns.despine()
+    plt.legend(loc='upper right')
+    plt.xlabel('Volume')
+    plt.ylabel('Probability Density')
+    plt.title('Histogram of Target Values')
+    axes = plt.gca()
+    axes.set_xlim([kwargs['hist_kwargs']['range'][0],kwargs['hist_kwargs']['range'][1]])
+    axes.set_ylim([None,None])
+    plt.savefig('../figures\\' + filename +'.png')
+
+def case_run_manager(cases = [], data = None, T = None, save_entropy_time_series = False, save_histograms = False, save_network = False, do_rework = False, save_comparisons = False, **kwargs):
+
+    case = {}
+    for case_num in cases:
+        logging.info('_________CASE {}_________'.format(case_num))
+        logging.info(' Attempting to load Case {}'.format(case_num))
+
+        if case_num == 1:
+            case[case_num] = Case_1(data = data)
+        elif case_num == 2:
+            case[case_num] = Case_2(data = data)
+        elif case_num == 3:
+            case[case_num] = Case_3(data = data.calc_vols())
+        elif case_num == 4:
+            case[case_num] = Case_4(data = data)
+        else:
+            logging.ERROR(' Invalid Case Number')
+            return
+
+        logging.info(' Loaded Case {}'.format(case_num))
+        logging.info(' Starting Case {} run with T={}'.format(case_num, T))
+
+        if T == None:
+            case[case_num].run(**kwargs)
+        else:
+            case[case_num].run(T=T, **kwargs)
+
+        logging.info(' Case {} Run Complete'.format(case_num))
+
+        if do_rework:
+            logging.info(' Starting Case {} Rework'.format(case_num))
+            if case_num == 1:
+                if labelled:
+                    case[case_num].remove_bad_ship_labelled()
+                else:
+                    case[case_num].remove_bad_ship_unlabelled()
+            else:
+                case[case_num].remove_bad_ship()
+            logging.info(' Case {} rework complete'.format(case_num))
+
+        if save_entropy_time_series:
+            logging.info(' Saving Time Series Images')
+            # Plot time series and save file in figures directory
+            case[case_num].save_entropy_time_series_plot(
+                case[case_num].topological_entropy_time_series,
+                filename ='case{}_topological_entropy_time_series'.format(case_num),
+                title = 'case{}_topological_entropy_time_series'.format(case_num),
+                x_min = 0,
+                x_max = 5,
+                y_min = -0.1,
+                y_max = 5,
+                grid = False
+            )
+
+            case[case_num].save_entropy_time_series_plot(
+                case[case_num].simple_entropy_time_series,
+                filename ='case{}_simple_entropy_time_series'.format(case_num),
+                title = 'case{}_simple_entropy_time_series'.format(case_num),
+                x_min = 0,
+                x_max = 5,
+                y_min = -0.1,
+                y_max = 5,
+                grid = False
+            )
+
+            case[case_num].save_entropy_time_series_plot(
+                case[case_num].target_value_shannon_entropy_time_series,
+                filename ='case{}_target_value_entropy_time_series_shannon'.format(case_num),
+                title = 'Case {} Target Value Entropy Time Series (Shannon)'.format(case_num),
+                x_min = 0,
+                x_max = 15,
+                y_min = -0.1,
+                y_max = None,
+                grid = False
+            )
+
+            case[case_num].save_entropy_time_series_plot(
+                case[case_num].target_value_CRE_entropy_time_series,
+                filename ='case{}_target_value_entropy_time_series_CRE'.format(case_num),
+                title = 'Case {} Target Value Entropy Time Series (CRE)'.format(case_num),
+                x_min = 0,
+                x_max = 15,
+                y_min = -0.1,
+                y_max = None,
+                grid = False
+            )
+
+        if save_network:
+            logging.info(' Saving Final Network Image')
+            # Plot final network layout
+            case[case_num].save_final_network_plot(
+                filename = "case{}_final_network".format(case_num),
+                prog = 'twopi',
+                with_labels = True,
+                font_weight = 'normal',
+                font_size = 10,
+                node_size = 120,
+                node_color = 'blue',
+                alpha = 0.6,
+                arrowstyle = '->',
+                arrowsize = 10
+            )
+
+        if save_histograms:
+            logging.info(' Saving Histograms')
+
+            if case_num == 1:
+                pass # CANT CALCULATE A DISTRIBUTION FOR CASE 1 (one point)
+
+            elif case_num == 4:
+                case[case_num].save_target_value_histogram_plot(
+                    filename = 'case{}_target_value_distribution'.format(case_num),
+                    label = 'Case {}'.format(case_num),
+                    **kwargs
+                )
+            else:
+                case[case_num].save_target_value_histogram_plot(
+                    filename = 'case{}_target_value_distribution'.format(case_num),
+                    label = 'Case {}'.format(case_num),
+                    **kwargs
+                )
+
+    logging.info('_________________________')
+
+    if save_comparisons:
+        # Save Case Comparison Graphs
+        logging.info(' Starting Entropy Comparison Plots')
+
+        topological_entropy_time_series_dict = {
+            k:v.topological_entropy_time_series for k,v in case.items()
+        }
+
+        simple_entropy_time_series_dict = {
+            k:v.simple_entropy_time_series for k,v in case.items()
+        }
+
+        target_value_shannon_entropy_time_series_dict = {
+            k:v.target_value_shannon_entropy_time_series for k,v in case.items()
+        }
+
+        target_value_CRE_entropy_time_series_dict = {
+            k:v.target_value_CRE_entropy_time_series for k,v in case.items()
+        }
+
+        histogram_data_dict = {
+            k:v.get_histogram_data(node = v.target_node, **kwargs['hist_kwargs'])
+            for k,v in case.items() if k != 1
+        }
+
+        save_entropy_comparison_plots(
+            topological_entropy_time_series_dict,
+            filename ='topological_entropy_time_series_comparison',
+            title = 'Topological Entropy Case Comparison',
+            x_min = 0,
+            x_max = 15,
+            y_min = -0.1,
+            y_max = 5,
+            grid = False
+        )
+
+        save_entropy_comparison_plots(
+            simple_entropy_time_series_dict,
+            filename ='simple_entropy_time_series_comparison',
+            title = 'Simple Entropy Case Comparison',
+            x_min = 0,
+            x_max = 15,
+            y_min = -0.1,
+            y_max = 5,
+            grid = False
+        )
+
+        save_entropy_comparison_plots(
+            target_value_shannon_entropy_time_series_dict,
+            filename ='target_value_entropy_time_series_comparison_shannon',
+            title = 'Target Value Entropy Case Comparison (Shannon)',
+            x_min = 0,
+            x_max = 15,
+            y_min = -0.1,
+            y_max = None,
+            grid = False
+        )
+
+        save_entropy_comparison_plots(
+            target_value_CRE_entropy_time_series_dict,
+            filename ='target_value_entropy_time_series_comparison_CRE',
+            title = 'Target Value Entropy Case Comparison (CRE)',
+            x_min = 0,
+            x_max = 15,
+            y_min = -0.1,
+            y_max = None,
+            grid = False
+        )
+
+        logging.info(' Starting Histogram Comparison Plot')
+
+        save_histogram_comparison_plots(
+            histogram_data_dict,
+            filename = "target_value_distribution_comparison",
+            title = "Target Value Distribution Case Comparison",
+            **kwargs
+        )
+
+    logging.info(' Done.')
+    return case
+
+def simulate_rework_times(cases = [], data = None, num_trials = 500, save_files = False, **kwargs):
+    file_path = "../results\\"
+    case = {}
+
+    for case_num in cases:
+
+        logging.info(' Attempting to load Case {}'.format(case_num))
+        if case_num == 1:
+            case[case_num] = Case_1(data = data)
+        elif case_num == 2:
+            case[case_num] = Case_2(data = data)
+        elif case_num == 3:
+            case[case_num] = Case_3(data = data.calc_vols())
+        # elif case_num == 4:
+        #     case[case_num] = Case_4(data = data)
+        else:
+            logging.ERROR(' Invalid Case Number')
+            return
+
+        logging.info(' Loaded Case {}'.format(case_num))
+
+        case_rework_times = {}
+
+        if case_num == 1:
+            # Labelled Case
+            filename = "{}case1_labelled_rework_time_data_test.csv".format(file_path)
+            logging.info('Starting Case 1 (labelled)')
+            for i in range(num_trials):
+                c = case[case_num]
+                c.run(**kwargs)
+                c.remove_bad_ship_labelled()
+                case_rework_times[i] = c.rework_time
+                logging.info(' Iteration {}, Value: {}'.format(i, c.rework_time))
+
+
+            if save_files:
+                logging.info('Saving file...')
+                with open(filename, 'w') as f:
+                    for key in case_rework_times.keys():
+                        f.write("{},{}\n".format(key, case_rework_times[key]))
+
+            logging.info('Finished Case 1 (labelled)')
+
+            case_rework_times = {}
+            filename = "{}case1_unlabelled_rework_time_data_test.csv".format(file_path)
+            logging.info('Starting Case 1 (unlabelled)')
+            for i in range(num_trials):
+                c = case[case_num]
+                #print c
+                c.run(**kwargs)
+                c.remove_bad_ship_unlabelled()
+                case_rework_times[i] = c.rework_time
+                logging.info(' Iteration {}, Value: {}'.format(i, c.rework_time))
+
+            if save_files:
+                logging.info('Saving file...')
+                with open(filename, 'w') as f:
+                    for key in case_rework_times.keys():
+                        f.write("{},{}\n".format(key, case_rework_times[key]))
+
+            logging.info('Finished Case 1 (unlabelled)')
+
+        else:
+            case_rework_times = {}
+            filename = "{}case{}_rework_time_data_test.csv".format(file_path, case_num)
+            logging.info('Starting Case {}'.format(case_num))
+            for i in range(num_trials):
+                c = case[case_num]
+                c.run(**kwargs)
+                c.remove_bad_ship_unlabelled()
+                case_rework_times[i] = c.rework_time
+                logging.info(' Iteration {}, Value: {}'.format(i, c.rework_time))
+
+            if save_files:
+                logging.info('Saving file...')
+                with open(filename, 'w') as f:
+                    for key in case_rework_times.keys():
+                        f.write("{},{}\n".format(key, case_rework_times[key]))
+
+            logging.info('Finished Case {}'.format(case_num))
+
 ###############################################################################
 def main():
-
-    save_images = False # should the images be saved?
 
     # Import the data
     raw_data = Case_Data('../data_sources\\case_data.csv')
 
-
-    ##################### CASE 1 #######################
-    # Initialize Case 1
-    case1 = Case_1(data = raw_data)
-
-    # Run Case 1 forwards
-    case1.run(T = 5)
-
-    # Conduct rework
-    #case1.remove_bad_ship_labelled()
-
-    #case1.remove_bad_ship_unlabelled(print_output=True)
-    #print case1.rework_time
-
-    if save_images:
-        # Plot time series and save file in figures directory
-        case1.save_entropy_time_series_plot(
-            case1.topological_entropy_time_series,
-            filename ='case1_topological_entropy_time_series',
-            title = 'case1_topological_entropy_time_series',
-            x_min = 0,
-            x_max = 5,
-            y_min = -0.1,
-            y_max = 5,
-            grid = False
-        )
-
-        case1.save_entropy_time_series_plot(
-            case1.simple_entropy_time_series,
-            filename ='case1_simple_entropy_time_series',
-            title = 'case1_simple_entropy_time_series',
-            x_min = 0,
-            x_max = 5,
-            y_min = -0.1,
-            y_max = 5,
-            grid = False
-        )
-
-        # Plot final network layout
-        case1.save_final_network_plot(
-            filename = "case1_final_network",
-            prog = 'twopi',
-            with_labels = True,
-            font_weight = 'normal',
-            font_size = 10,
-            node_size = 120,
-            node_color = 'blue',
-            alpha = 0.6,
-            arrowstyle = '->',
-            arrowsize = 10
-        )
+    # Create dict to store all case data
+    case = case_run_manager(
+        cases = [1,2,3,4],
+        data = raw_data,
+        #T = 5,
+        do_rework = False,
+        save_entropy_time_series = True,
+        save_network = False,
+        save_histograms = False,
+        save_comparisons = True,
+        **{
+            'hist_kwargs': {
+                'bins': np.linspace(1000,15000,51), # min, max, n_bins. MUST MATCH RANGE!
+                'range': (1000,15000),
+                'normed': True,
+                'cumulative': False
+            },
+            'plot_kwargs': {
+                'hist': True,
+                'kde': True,
+                'norm_hist': True
+            }
+        }
+    )
 
 
-    # ##################### CASE 2 #######################
-    # # Initialize Case 2
-    # case2 = Case_2(data = raw_data)
-    #
-    # # Run Case 2 forwards
-    # case2.run(T = 14)
-    #
-    # # Conduct Rework
-    # #case2.remove_bad_ship()
-    #
-    # if save_images:
-    #     # Plot time series and save file in figures directory
-    #     case2.save_entropy_time_series_plot(
-    #         case2.topological_entropy_time_series,
-    #         filename ='case2_topological_entropy_time_series',
-    #         title = 'case2_topological_entropy_time_series',
-    #         x_min = 0,
-    #         x_max = 14,
-    #         y_min = -0.1,
-    #         y_max = 5,
-    #         grid = False
-    #     )
-    #
-    #     case2.save_entropy_time_series_plot(
-    #         case2.simple_entropy_time_series,
-    #         filename ='case2_simple_entropy_time_series',
-    #         title = 'case2_simple_entropy_time_series',
-    #         x_min = 0,
-    #         x_max = 14,
-    #         y_min = -0.1,
-    #         y_max = 5,
-    #         grid = False
-    #     )
-    #
-    #     case2.save_entropy_time_series_plot(
-    #         case2.target_value_entropy_time_series,
-    #         filename ='case2_target_value_entropy_time_series_shannon',
-    #         title = 'case2_target_value_entropy_time_series (Shannon)',
-    #         x_min = 0,
-    #         x_max = 14,
-    #         y_min = -0.1,
-    #         y_max = None,
-    #         grid = False
-    #     )
-    #
-    #     # Plot final network layout
-    #     case2.save_final_network_plot(
-    #         filename = "case2_final_network",
-    #         prog = 'twopi',
-    #         with_labels = True,
-    #         font_weight = 'normal',
-    #         font_size = 10,
-    #         node_size = 120,
-    #         node_color = 'blue',
-    #         alpha = 0.6,
-    #         arrowstyle = '->',
-    #         arrowsize = 10
-    #     )
-    #
-    #
-    #
-    # ############################ CASE 3 ###############################
-    # # Initialize Case 3
-    # case3_data = raw_data.calc_vols()
-    #
-    # case3 = Case_3(data = case3_data)
-    #
-    #
-    # # Run Case 3 forwards
-    # case3.run(T = 14)
-    #
-    # # Conduct Rework
-    # #case3.remove_bad_ship()
-    # #print case3.rework_time
-    #
-    # if save_images:
-    #     # Plot time series and save file in figures directory
-    #     case3.save_entropy_time_series_plot(
-    #         case3.topological_entropy_time_series,
-    #         filename ='case3_topological_entropy_time_series',
-    #         title = 'case3_topological_entropy_time_series',
-    #         x_min = 0,
-    #         x_max = 14,
-    #         y_min = -0.1,
-    #         y_max = 5,
-    #         grid = False
-    #     )
-    #
-    #     case3.save_entropy_time_series_plot(
-    #         case3.simple_entropy_time_series,
-    #         filename ='case3_simple_entropy_time_series',
-    #         title = 'case3_simple_entropy_time_series',
-    #         x_min = 0,
-    #         x_max = 14,
-    #         y_min = -0.1,
-    #         y_max = 5,
-    #         grid = False
-    #     )
-    #
-    #     case3.save_entropy_time_series_plot(
-    #         case3.target_value_entropy_time_series,
-    #         filename ='case3_target_value_entropy_time_series_shannon',
-    #         title = 'case3_target_value_entropy_time_series (Shannon)',
-    #         x_min = 0,
-    #         x_max = 14,
-    #         y_min = -0.1,
-    #         y_max = None,
-    #         grid = False
-    #     )
-    #
-    #     # Plot final network layout
-    #     case3.save_final_network_plot(
-    #         filename = "case3_final_network",
-    #         prog = 'twopi',
-    #         with_labels = True,
-    #         font_weight = 'normal',
-    #         font_size = 10,
-    #         node_size = 120,
-    #         node_color = 'blue',
-    #         alpha = 0.6,
-    #         arrowstyle = '->',
-    #         arrowsize = 10
-    #     )
-    #
-    # ##################### CASE 4 #######################
-    # # Initialize Case 4
-    # raw_data = Case_Data('../data_sources\\case_data.csv')
-    # case4 = Case_4(data = raw_data)
-    #
-    #
-    # # Run Case 4 forwards
-    # case4.run(T = 15)
-    #
-    # # Conduct rework
-    # #case4.remove_bad_ship_labelled()
-    #
-    # #case4.remove_bad_ship_unlabelled()
-    # #print case4.rework_time
-    #
-    # if save_images:
-    #     # Plot time series and save file in figures directory
-    #     case4.save_entropy_time_series_plot(
-    #         case4.topological_entropy_time_series,
-    #         filename ='case4_topological_entropy_time_series',
-    #         title = 'case4_topological_entropy_time_series',
-    #         x_min = 0,
-    #         x_max = 15,
-    #         y_min = -0.1,
-    #         y_max = 5,
-    #         grid = False
-    #     )
-    #
-    #     case4.save_entropy_time_series_plot(
-    #         case4.simple_entropy_time_series,
-    #         filename ='case4_simple_entropy_time_series',
-    #         title = 'case4_simple_entropy_time_series',
-    #         x_min = 0,
-    #         x_max = 15,
-    #         y_min = -0.1,
-    #         y_max = 5,
-    #         grid = False
-    #     )
-    #
-    #     case4.save_entropy_time_series_plot(
-    #         case4.target_value_entropy_time_series,
-    #         filename ='case4_target_value_entropy_time_series_shannon',
-    #         title = 'case4_target_value_entropy_time_series (Shannon)',
-    #         x_min = 0,
-    #         x_max = 15,
-    #         y_min = -0.1,
-    #         y_max = None,
-    #         grid = False
-    #     )
-    #
-    #     # Plot final network layout
-    #     case4.save_final_network_plot(
-    #         filename = "case4_final_network",
-    #         prog = 'twopi',
-    #         with_labels = True,
-    #         font_weight = 'normal',
-    #         font_size = 10,
-    #         node_size = 120,
-    #         node_color = 'blue',
-    #         alpha = 0.6,
-    #         arrowstyle = '->',
-    #         arrowsize = 10
-    #     )
-
-    # # Save Case Comparison Graphs
-    #
-    # topological_entropy_time_series_dict = {
-    #     1: case1.topological_entropy_time_series,
-    #     2: case2.topological_entropy_time_series,
-    #     3: case3.topological_entropy_time_series,
-    #     4: case4.topological_entropy_time_series,
-    # }
-    #
-    # simple_entropy_time_series_dict = {
-    #     1: case1.simple_entropy_time_series,
-    #     2: case2.simple_entropy_time_series,
-    #     3: case3.simple_entropy_time_series,
-    #     4: case4.simple_entropy_time_series,
-    # }
-    #
-    # target_value_entropy_time_series_dict = {
-    #     #1: case1.target_value_entropy_time_series,
-    #     2: case2.target_value_entropy_time_series,
-    #     3: case3.target_value_entropy_time_series,
-    #     4: case4.target_value_entropy_time_series,
-    # }
-    #
-    #
-    #
-    # save_entropy_comparison_plots(
-    #     topological_entropy_time_series_dict,
-    #     filename ='topological_entropy_time_series_comparison',
-    #     title = 'Topological Entropy Case Comparison',
-    #     x_min = 0,
-    #     x_max = 15,
-    #     y_min = -0.1,
-    #     y_max = 5,
-    #     grid = False
+    # simulate_rework_times(
+    #     cases = [1,2,3],
+    #     data = raw_data,
+    #     num_trials = 10,
+    #     save_files = True
     # )
-    #
-    # save_entropy_comparison_plots(
-    #     simple_entropy_time_series_dict,
-    #     filename ='simple_entropy_time_series_comparison',
-    #     title = 'Simple Entropy Case Comparison',
-    #     x_min = 0,
-    #     x_max = 15,
-    #     y_min = -0.1,
-    #     y_max = 5,
-    #     grid = False
-    # )
-    #
-    # save_entropy_comparison_plots(
-    #     target_value_entropy_time_series_dict,
-    #     filename ='target_value_entropy_time_series_comparison_shannon',
-    #     title = 'Target Value Entropy Case Comparison (Shannon)',
-    #     x_min = 0,
-    #     x_max = 15,
-    #     y_min = -0.1,
-    #     y_max = None,
-    #     grid = False
-    # )
-
-
-    ################# Running Statistics on computation times ##################
-
-    num_trials = 500
 
     # # CASE 1 (labelled)
     # filename = "../results\\case1_labelled_rework_time_data.csv"
@@ -1139,20 +1191,20 @@ def main():
     #     for key in case1_labelled_rework_times.keys():
     #         f.write("{},{}\n".format(key, case1_labelled_rework_times[key]))
     #
-    # CASE 1 (unlabelled)
-    filename = "../results\\case1_unlabelled_rework_time_data.csv"
-    case1_unlabelled_rework_times = {}
-
-    for i in range(num_trials):
-        case1 = Case_1(data = raw_data)
-        case1.run()
-        case1.remove_bad_ship_unlabelled()
-        case1_unlabelled_rework_times[i] = case1.rework_time
-        logging.info(' Iteration {}, Value: {}'.format(i, case1.rework_time))
-
-    with open(filename, 'w') as f:
-        for key in case1_unlabelled_rework_times.keys():
-            f.write("{},{}\n".format(key, case1_unlabelled_rework_times[key]))
+    # #CASE 1 (unlabelled)
+    # filename = "../results\\case1_unlabelled_rework_time_data.csv"
+    # case1_unlabelled_rework_times = {}
+    #
+    # for i in range(num_trials):
+    #     case1 = Case_1(data = raw_data)
+    #     case1.run()
+    #     case1.remove_bad_ship_unlabelled()
+    #     case1_unlabelled_rework_times[i] = case1.rework_time
+    #     logging.info(' Iteration {}, Value: {}'.format(i, case1.rework_time))
+    #
+    # with open(filename, 'w') as f:
+    #     for key in case1_unlabelled_rework_times.keys():
+    #         f.write("{},{}\n".format(key, case1_unlabelled_rework_times[key]))
     #
     # # CASE 2
     # filename = "../results\\case2_rework_time_data.csv"
@@ -1184,8 +1236,6 @@ def main():
     # with open(filename, 'w') as f:
     #     for key in case3_rework_times.keys():
     #         f.write("{},{}\n".format(key, case3_rework_times[key]))
-
-
 
 if __name__ == '__main__':
     main()
