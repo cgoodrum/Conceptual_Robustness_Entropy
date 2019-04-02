@@ -1,5 +1,6 @@
 import csv
 import numpy as np
+import random as rd
 
 class Case_Data(object):
     def __repr__(self):
@@ -67,3 +68,15 @@ class Case_Data(object):
         avg = self.calc_var_avgs()
         avg_vol = avg['L']*avg['B']*avg['T']*avg['Cb']
         return avg_vol
+
+    def randomize(self):
+        random_data = {}
+
+        count = 1
+        for key, value in sorted(self.data.items(), key=lambda x: rd.random()):
+            #print key, value
+            random_data[count] = value
+            count +=1
+
+        self.data = random_data
+        #return random_data

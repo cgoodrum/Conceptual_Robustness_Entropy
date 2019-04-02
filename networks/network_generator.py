@@ -6,7 +6,7 @@ import graphviz as gv
 import pydot
 from networkx.drawing.nx_pydot import graphviz_layout
 import math
-import pylab
+#import pylab
 import itertools
 #import pygraphviz
 import matplotlib.pyplot as plt
@@ -19,9 +19,11 @@ import logging
 import seaborn as sns
 import random as rd
 import numpy as np
+import pandas as pd
+from copy import deepcopy
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(stream=sys.stdout, format = '%(levelname)s:%(message)s', level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, format = '%(levelname)s: %(message)s', level=logging.INFO)
 #pylab.ion()
 
 '''
@@ -55,7 +57,7 @@ class Knowledge_Network(object):
         self.binary_entropy_time_series = {}
         self.target_value_shannon_entropy_time_series = {}
         self.target_value_CRE_entropy_time_series = {}
-        self.graphviz_path = 'C:/Users/cgoodrum/Anaconda2/Lib/site-packages/graphviz-2.38/release/bin'
+        self.graphviz_path = 'C:/Python37/Lib/site-packages/graphviz-2.38/release/bin'
 
     def init_network(self):
         G = nx.DiGraph()
@@ -264,7 +266,7 @@ class Case_1(Knowledge_Network):
                 self.network.add_edge(new_node_label + k, 4)
 
         else:
-            print "Error: Time limit exceeds number of average variable values!"
+            print("Error: Time limit exceeds number of average variable values!")
 
     def initial_grow(self):
         self.network.add_node(1, **self.add_attributes('avg_L'))
@@ -315,10 +317,10 @@ class Case_1(Knowledge_Network):
     def remove_bad_ship_labelled(self, print_output = False):
 
         if print_output:
-            print ""
-            print "Case 1 (Labelled):"
-            print ""
-            print "Initial val:", self.network.node[0]['val']
+            print()
+            print("Case 1 (Labelled):")
+            print()
+            print("Initial val:", self.network.node[0]['val'])
 
         # Start the timer
         start_time = time.clock()
@@ -368,18 +370,18 @@ class Case_1(Knowledge_Network):
         elapsed_time = end_time - start_time
 
         if print_output:
-            print "Final val:", self.network.node[0]['val']
-            print "Time Elapsed:", elapsed_time
+            print("Final val:", self.network.node[0]['val'])
+            print("Time Elapsed:", elapsed_time)
 
         self.rework_time = elapsed_time
 
     def remove_bad_ship_unlabelled(self, print_output = False):
 
         if print_output:
-            print ""
-            print "Case 1 (Un-labelled):"
-            print ""
-            print "Initial val:", self.network.node[0]['val']
+            print("")
+            print("Case 1 (Un-labelled):")
+            print("")
+            print("Initial val:", self.network.node[0]['val'])
 
         # Start the timer
         start_time = time.clock()
@@ -403,7 +405,7 @@ class Case_1(Knowledge_Network):
 
         count = 1
         for k in sorted(vol_dict.values(), reverse = True):
-            print count, k
+            print(count, k)
             count += 1
 
         # Find the largest value for removal
@@ -424,8 +426,8 @@ class Case_1(Knowledge_Network):
         elapsed_time = end_time - start_time
 
         if print_output:
-            print "Final val:", self.network.node[0]['val']
-            print "Time Elapsed:", elapsed_time
+            print("Final val:", self.network.node[0]['val'])
+            print("Time Elapsed:", elapsed_time)
 
         self.rework_time = elapsed_time
 
@@ -516,11 +518,11 @@ class Case_2(Knowledge_Network):
 
     def remove_bad_ship(self, print_output = False):
 
-        if print_output:
-            print ""
-            print "Case 2:"
-            print ""
-            print "Initial val:", self.network.node[0]['val']
+        # if print_output:
+        #     print ""
+        #     print "Case 2:"
+        #     print ""
+        #     print "Initial val:", self.network.node[0]['val']
 
         # Start the timer
         start_time = time.clock()
@@ -546,9 +548,9 @@ class Case_2(Knowledge_Network):
         end_time = time.clock()
         elapsed_time = end_time - start_time
 
-        if print_output:
-            print "Final val:", self.network.node[0]['val']
-            print "Time Elapsed:", elapsed_time
+        # if print_output:
+        #     print "Final val:", self.network.node[0]['val']
+        #     print "Time Elapsed:", elapsed_time
 
         self.rework_time = elapsed_time
 
@@ -614,11 +616,11 @@ class Case_3(Knowledge_Network):
 
     def remove_bad_ship(self, print_output = False):
 
-        if print_output:
-            print ""
-            print "Case 3:"
-            print ""
-            print "Initial val:", self.network.node[0]['val']
+        # if print_output:
+        #     print ""
+        #     print "Case 3:"
+        #     print ""
+        #     print "Initial val:", self.network.node[0]['val']
 
         # Start the timer
         start_time = time.clock()
@@ -642,9 +644,9 @@ class Case_3(Knowledge_Network):
         end_time = time.clock()
         elapsed_time = end_time - start_time
 
-        if print_output:
-            print "Final val:", self.network.node[0]['val']
-            print "Time Elapsed:", elapsed_time
+        # if print_output:
+        #     print "Final val:", self.network.node[0]['val']
+        #     print "Time Elapsed:", elapsed_time
 
         self.rework_time = elapsed_time
 
@@ -780,9 +782,13 @@ class Case_4(Knowledge_Network):
         for n in pred:
             value = self.network.node[n]['val']*value
         target_values[self.time_step] = value
-        histogram_data = plt.hist(target_values.values(), **kwargs)
+        # histogram_data = plt.hist(target_values.values(), **kwargs)
+        # plt.close()
+        # return histogram_data, target_values.values()
+        values = list(target_values.values())
+        histogram_data = plt.hist(values, **kwargs)
         plt.close()
-        return histogram_data, target_values.values()
+        return histogram_data, values
 
     def run(self, T=15, **kwargs):
         # Runs the case forwards (building the knowledge network)
@@ -839,7 +845,7 @@ def save_histogram_comparison_plots(case_histograms, filename = 'untitled', xlab
     plt.figure()
     sns.set()
     sns.set_style('white')
-    for k,v in case_histograms.items():
+    for k, v in case_histograms.items():
         sns.distplot(v[1], bins = kwargs['hist_kwargs']['bins'], label = 'Case {}'.format(k), **kwargs['plot_kwargs'])
     sns.despine()
     plt.legend(loc='upper right')
@@ -855,7 +861,7 @@ def case_run_manager(cases = [], data = None, T = None, save_entropy_time_series
 
     case = {}
     for case_num in cases:
-        logging.info('_________CASE {}_________'.format(case_num))
+        logging.info('_________ CASE {} _________'.format(case_num))
         logging.info(' Attempting to load Case {}'.format(case_num))
 
         if case_num == 1:
@@ -1137,36 +1143,210 @@ def simulate_rework_times(cases = [], data = None, num_trials = 500, save_files 
 
             logging.info('Finished Case {}'.format(case_num))
 
+def save_pickle(dataframe, filename):
+    dataframe.to_pickle('../results\\{}.pkl'.format(filename))
+
+def get_pickle(filename):
+    return pd.read_pickle('../results\\{}.pkl'.format(filename))
+
+def shift_time(row):
+    if row['Case'] == 'Case 4':
+        val = row['Time'] - 1
+    else:
+        val = row['Time']
+    return val
+
 ###############################################################################
 def main():
 
     # Import the data
     raw_data = Case_Data('../data_sources\\case_data.csv')
 
-    # Create dict to store all case data
-    case = case_run_manager(
-        cases = [1,2,3,4],
-        data = raw_data,
-        #T = 5,
-        do_rework = False,
-        save_entropy_time_series = True,
-        save_network = False,
-        save_histograms = False,
-        save_comparisons = True,
-        **{
-            'hist_kwargs': {
-                'bins': np.linspace(1000,15000,51), # min, max, n_bins. MUST MATCH RANGE!
-                'range': (1000,15000),
-                'normed': True,
-                'cumulative': False
-            },
-            'plot_kwargs': {
-                'hist': True,
-                'kde': True,
-                'norm_hist': True
+    ##################### SINGLE INSTANCE ###########################
+    # case = case_run_manager(
+    #     cases = [1,2,3,4],
+    #     data = raw_data,
+    #     #T = 5,
+    #     do_rework = False,
+    #     save_entropy_time_series = True,
+    #     save_network = True,
+    #     save_histograms = False,
+    #     save_comparisons = True,
+    #     **{
+    #         'hist_kwargs': {
+    #             'bins': np.linspace(1000,15000,51), # min, max, n_bins. MUST MATCH RANGE!
+    #             'range': (1000,15000),
+    #             'density': True,
+    #             'cumulative': False
+    #         },
+    #
+    #         'plot_kwargs': {
+    #             'hist': True,
+    #             'kde': True,
+    #             'norm_hist': True
+    #         }
+    #     }
+    # )
+
+
+
+    # fmri = sns.load_dataset("fmri")
+    #
+    # print(fmri)
+    # print(fmri.dtypes)
+    #
+    # plt.figure()
+    # ax = sns.lineplot(
+    #     x="timepoint",
+    #     y="signal",
+    #     hue="event",
+    #     units="subject",
+    #     estimator=None,
+    #     lw=1,
+    #     data=fmri
+    # )
+    # plt.show()
+
+
+    ############### RANDOMIZED TRIALS ##################
+
+    num_trials = 250
+    random_CRE_target_value_entropy_time_series = {}
+    random_shannon_target_value_entropy_time_series = {}
+    random_target_value_entropy_time_series = {}
+    data_dict = {}
+    for i in range(num_trials):
+        logging.info('-----------------------------------------------')
+        logging.info('              Iteration {} of {}'.format(i+1, num_trials))
+        logging.info('-----------------------------------------------')
+
+        raw_data.randomize()
+
+        case = case_run_manager(
+            cases = [2,4],
+            data = raw_data,
+            #T = 5,
+            do_rework = False,
+            save_entropy_time_series = False,
+            save_network = False,
+            save_histograms = False,
+            save_comparisons = False,
+            **{
+                'hist_kwargs': {
+                    'bins': np.linspace(1000,15000,51), # min, max, n_bins. MUST MATCH RANGE!
+                    'range': (1000,15000),
+                    'density': True,
+                    'cumulative': False
+                },
+
+                'plot_kwargs': {
+                    'hist': True,
+                    'kde': True,
+                    'norm_hist': True
+                }
             }
+        )
+
+        # random_CRE_target_value_entropy_time_series[i] = {
+        #     k:v.target_value_CRE_entropy_time_series for k,v in case.items()
+        # }
+        #
+        # #print(random_CRE_target_value_entropy_time_series)
+        #
+        # random_shannon_target_value_entropy_time_series[i] = {
+        #     k:v.target_value_shannon_entropy_time_series for k,v in case.items()
+        # }
+
+        random_target_value_entropy_time_series[i] = {
+            k:(deepcopy(v.target_value_CRE_entropy_time_series), deepcopy(v.target_value_shannon_entropy_time_series))
+            for k,v in case.items()
         }
-    )
+
+        data_dict[i] = deepcopy(raw_data.data)
+
+    # Create pandas dataframe to hold the above dicts, for plotting with the errorbands
+
+    dfs = []
+    for trial, case_dict in random_target_value_entropy_time_series.items():
+        tdfs = []
+        raw_data = data_dict[trial]
+        for case, time_dict in case_dict.items():
+            data = {'Time': [], 'CRE': [], 'Shannon': [], 'Ship': [], 'L': [], 'B':[], 'T':[], 'Cb':[], 'Vol': []}
+            for t, v in time_dict[0].items():
+                data['Time'].append(t)
+                data['CRE'].append(v)
+            for t, v in time_dict[1].items():
+                data['Shannon'].append(v)
+            for _, v in sorted([(k, v) for k, v in raw_data.items()], key=lambda x: x[0]):
+                for k1, v1 in v.items():
+                    data[k1].append(v1)
+                data['Vol'].append(v['L']*v['B']*v['T']*v['Cb'])
+            df = pd.DataFrame(data)
+            df['Vol Rank'] = df['Vol'].rank(ascending = False)
+            df['Vol Rank'] = df['Vol Rank'].astype('int64')
+            df['Case'] = "Case {}".format(case)
+            tdfs.append(df)
+        tdf = pd.concat(tdfs, ignore_index=True, sort=False)
+        tdf['Trial'] = trial
+        dfs.append(tdf)
+    df = pd.concat(dfs, ignore_index=True, sort=False)
+
+    save_pickle(df, 'cases24_ensemble_data_n=250')
+
+
+    # df = get_pickle('cases24_ensemble_data_n=100')
+    #
+    # df['Shifted Time'] = df.apply(shift_time, axis=1)
+    #
+    #
+    # for i in range(1,15):
+    #
+    #     trials = df[(df['Shifted Time'] == i) & (df['Vol Rank'] == 1) & (df['Case'] == 'Case 2')]['Trial']
+    #
+    #     plt_df = pd.concat(
+    #     [df[df['Trial'] == t] for t in trials],
+    #     ignore_index = True, sort = False
+    #     )
+    #
+    #     plt.figure()
+    #     sns.set()
+    #     sns.set_style('white')
+    #     sns.lineplot(
+    #         x = 'Shifted Time',
+    #         y = 'CRE',
+    #         hue = 'Case',
+    #         ci = 100,
+    #         n_boot = 10000,
+    #         data = plt_df
+    #     )
+    #     sns.lineplot(
+    #         x = 'Shifted Time',
+    #         y = 'CRE',
+    #         hue = 'Case',
+    #         units = 'Trial',
+    #         estimator = None,
+    #         data = plt_df,
+    #         **{
+    #             'linewidth' : 0,
+    #             'marker': '.'
+    #         }
+    #     )
+    #     sns.despine()
+    #     handles, labels = plt.gca().get_legend_handles_labels()
+    #     plt.gca().legend(handles=handles[1:3], labels=labels[1:3])
+    #     plt.xlabel('Time Steps from initial')
+    #     plt.ylabel('Cumulative Residual Entropy (CRE)')
+    #     plt.title('CRE Time Series Enseble - Outlier (t = {})'.format(i))
+    #     axes = plt.gca()
+    #     axes.set_xlim([0,None])
+    #     axes.set_ylim([None,6500])
+    #     plt.savefig('../figures\\' + 'CRE_Ensemble_Time_Series_t={}.png'.format(i))
+    #     #plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+
+
+
+
 
 
     # simulate_rework_times(
