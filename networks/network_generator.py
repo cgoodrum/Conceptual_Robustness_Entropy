@@ -85,7 +85,7 @@ class Knowledge_Network(object):
         }
         return out_dict
 
-    def calculate_pagerank(self, alpha = 0.9):
+    def calculate_pagerank(self, alpha = 0.85):
         pagerank = nx.pagerank(self.network, alpha = alpha)
         return pagerank
 
@@ -455,21 +455,28 @@ class Case_2(Knowledge_Network):
         Knowledge_Network.__init__(self, **kwargs)
         self.data = data
 
+    def initial_grow(self):
+        for i in range(1,14+1):
+            new_node_label = i
+            self.network.add_node(new_node_label, **self.add_attributes('V'+str(new_node_label)))
+            self.network.add_edge(new_node_label, 0)
+        self.time_step = 1
+
     def grow(self):
         # Add the volume node, as well as one L, B, T, and Cb node, all
         # connected to target with associated edges. Import the associated data
         # for the variable nodes
         new_node_label = max(self.network.nodes()) + 1
-        self.network.add_node(new_node_label, **self.add_attributes('V'+str(self.time_step)))
-        self.network.add_edge(new_node_label, 0)
+        # self.network.add_node(new_node_label, **self.add_attributes('V'+str(self.time_step)))
+        # self.network.add_edge(new_node_label, 0)
         self.network.add_node(new_node_label+1, **self.add_attributes('L'+str(self.time_step),self.data.data[self.time_step]['L']))
         self.network.add_node(new_node_label+2, **self.add_attributes('B'+str(self.time_step),self.data.data[self.time_step]['B']))
         self.network.add_node(new_node_label+3, **self.add_attributes('T'+str(self.time_step),self.data.data[self.time_step]['T']))
         self.network.add_node(new_node_label+4, **self.add_attributes('Cb'+str(self.time_step),self.data.data[self.time_step]['Cb']))
-        self.network.add_edge(new_node_label+1, new_node_label)
-        self.network.add_edge(new_node_label+2, new_node_label)
-        self.network.add_edge(new_node_label+3, new_node_label)
-        self.network.add_edge(new_node_label+4, new_node_label)
+        self.network.add_edge(new_node_label+1, self.time_step)
+        self.network.add_edge(new_node_label+2, self.time_step)
+        self.network.add_edge(new_node_label+3, self.time_step)
+        self.network.add_edge(new_node_label+4, self.time_step)
 
     def calculate_non_target_values(self):
         # For each non target node in the network with non-zero in-degree, calculate the
@@ -493,9 +500,17 @@ class Case_2(Knowledge_Network):
         val = 0.0
         status_val = 1.0
         for n in pred:
-            val += self.network.node[n]['val']
-            status_val = status_val*self.network.node[n]['data_status']
-        val = status_val*val/float(len(pred))
+            if self.network.node[n]['val'] != None:
+                val += self.network.node[n]['val']
+                status_val = status_val*self.network.node[n]['data_status']
+            else:
+                val = None
+                status_val = None
+                break
+
+        if val != None:
+            val = status_val*val/float(len(pred))
+
         self.network.node[self.target_node]['val'] = val
         self.network.node[self.target_node]['data_status'] = self.calculate_data_status(self.target_node)
 
@@ -554,33 +569,36 @@ class Case_2(Knowledge_Network):
 
         self.rework_time = elapsed_time
 
-    def run(self, T = 14, **kwargs):
+    def run(self, T = 15, **kwargs):
         # Runs the case forwards (building the knowledge network)
         self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
         self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
         for i in range(1,T+1):
-            self.time_step+=1
-            self.grow()
+            if i == 1:
+                self.initial_grow()
+            else:
+                self.grow()
+                self.time_step+=1
             self.calculate_non_target_values()
             self.calculate_target_value()
 
             hist_kwargs = kwargs['hist_kwargs']
 
-            self.build_entropy_time_series(
-                self.target_value_shannon_entropy_time_series,
-                self.calculate_target_value_entropy(
-                    method = "shannon",
-                    **hist_kwargs
-                )
-            )
-
-            self.build_entropy_time_series(
-                self.target_value_CRE_entropy_time_series,
-                self.calculate_target_value_entropy(
-                    method = "CRE",
-                    **hist_kwargs
-                )
-            )
+            # self.build_entropy_time_series(
+            #     self.target_value_shannon_entropy_time_series,
+            #     self.calculate_target_value_entropy(
+            #         method = "shannon",
+            #         **hist_kwargs
+            #     )
+            # )
+            #
+            # self.build_entropy_time_series(
+            #     self.target_value_CRE_entropy_time_series,
+            #     self.calculate_target_value_entropy(
+            #         method = "CRE",
+            #         **hist_kwargs
+            #     )
+            # )
 
 
             self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
@@ -595,11 +613,21 @@ class Case_3(Knowledge_Network):
         self.data = data
 
     def grow(self):
-        # Add the volume node, and associated data, and connect to the target
-        # node (average volume).
-        new_node_label = max(self.network.nodes()) + 1
-        self.network.add_node(new_node_label, **self.add_attributes('V'+str(self.time_step), value = self.data[self.time_step]['V']))
-        self.network.add_edge(new_node_label, 0)
+        # # Add the volume node, and associated data, and connect to the target
+        # # node (average volume).
+        # new_node_label = max(self.network.nodes()) + 1
+        # self.network.add_node(new_node_label, **self.add_attributes('V'+str(self.time_step), value = self.data[self.time_step]['V']))
+        # self.network.add_edge(new_node_label, 0)
+
+        # If all data points are imported at once, uncomment below:
+
+        for i in range(1,14+1):
+            new_node_label = max(self.network.nodes()) + 1
+            self.network.add_node(new_node_label, **self.add_attributes('V'+str(i), value = self.data[i]['V']))
+            self.network.add_edge(new_node_label, 0)
+
+
+
 
     def calculate_target_value(self):
         # Calculate the target node (average volume) given the nodes it is connected to in the
@@ -650,7 +678,7 @@ class Case_3(Knowledge_Network):
 
         self.rework_time = elapsed_time
 
-    def run(self, T=14, **kwargs):
+    def run(self, T=1, **kwargs):
         # Runs the case forwards (building the knowledge network)
         self.build_entropy_time_series(self.topological_entropy_time_series, self.calculate_topological_entropy())
         self.build_entropy_time_series(self.simple_entropy_time_series, self.calculate_simple_entropy())
@@ -1150,8 +1178,8 @@ def get_pickle(filename):
     return pd.read_pickle('../results\\{}.pkl'.format(filename))
 
 def shift_time(row):
-    if row['Case'] == 'Case 4':
-        val = row['Time'] - 1
+    if row['Case'] == 'Case 2':
+        val = row['Time'] + 1
     else:
         val = row['Time']
     return val
@@ -1159,18 +1187,18 @@ def shift_time(row):
 ###############################################################################
 def main():
 
-    # Import the data
-    raw_data = Case_Data('../data_sources\\case_data.csv')
-
-    ##################### SINGLE INSTANCE ###########################
+    # # Import the data
+    # raw_data = Case_Data('../data_sources\\case_data.csv')
+    #
+    # #################### SINGLE INSTANCE ###########################
     # case = case_run_manager(
-    #     cases = [1,2,3,4],
+    #     cases = [2,4],
     #     data = raw_data,
     #     #T = 5,
     #     do_rework = False,
-    #     save_entropy_time_series = True,
-    #     save_network = True,
-    #     save_histograms = False,
+    #     save_entropy_time_series = False,
+    #     save_network = False,
+    #     save_histograms = True,
     #     save_comparisons = True,
     #     **{
     #         'hist_kwargs': {
@@ -1182,7 +1210,7 @@ def main():
     #
     #         'plot_kwargs': {
     #             'hist': True,
-    #             'kde': True,
+    #             'kde': False,
     #             'norm_hist': True
     #         }
     #     }
@@ -1208,142 +1236,146 @@ def main():
     # plt.show()
 
 
-    ############### RANDOMIZED TRIALS ##################
+    # ############### RANDOMIZED TRIALS ##################
+    #
+    # num_trials = 2200
+    # random_CRE_target_value_entropy_time_series = {}
+    # random_shannon_target_value_entropy_time_series = {}
+    # random_target_value_entropy_time_series = {}
+    # data_dict = {}
+    # for i in range(num_trials):
+    #     logging.info('-----------------------------------------------')
+    #     logging.info('              Iteration {} of {}'.format(i+1, num_trials))
+    #     logging.info('-----------------------------------------------')
+    #
+    #     raw_data.randomize()
+    #
+    #     case = case_run_manager(
+    #         cases = [2,4],
+    #         data = raw_data,
+    #         #T = 5,
+    #         do_rework = False,
+    #         save_entropy_time_series = False,
+    #         save_network = False,
+    #         save_histograms = False,
+    #         save_comparisons = False,
+    #         **{
+    #             'hist_kwargs': {
+    #                 'bins': np.linspace(1000,15000,51), # min, max, n_bins. MUST MATCH RANGE!
+    #                 'range': (1000,15000),
+    #                 'density': True,
+    #                 'cumulative': False
+    #             },
+    #
+    #             'plot_kwargs': {
+    #                 'hist': True,
+    #                 'kde': True,
+    #                 'norm_hist': True
+    #             }
+    #         }
+    #     )
+    #
+    #     # random_CRE_target_value_entropy_time_series[i] = {
+    #     #     k:v.target_value_CRE_entropy_time_series for k,v in case.items()
+    #     # }
+    #     #
+    #     # #print(random_CRE_target_value_entropy_time_series)
+    #     #
+    #     # random_shannon_target_value_entropy_time_series[i] = {
+    #     #     k:v.target_value_shannon_entropy_time_series for k,v in case.items()
+    #     # }
+    #
+    #     random_target_value_entropy_time_series[i] = {
+    #         k:(deepcopy(v.target_value_CRE_entropy_time_series), deepcopy(v.target_value_shannon_entropy_time_series))
+    #         for k,v in case.items()
+    #     }
+    #
+    #     data_dict[i] = deepcopy(raw_data.data)
+    #
+    # # Create pandas dataframe to hold the above dicts, for plotting with the errorbands
+    #
+    # dfs = []
+    # for trial, case_dict in random_target_value_entropy_time_series.items():
+    #     tdfs = []
+    #     raw_data = data_dict[trial]
+    #     for case, time_dict in case_dict.items():
+    #         data = {'Time': [], 'CRE': [], 'Shannon': [], 'Ship': [], 'L': [], 'B':[], 'T':[], 'Cb':[], 'Vol': []}
+    #         for t, v in time_dict[0].items():
+    #             data['Time'].append(t)
+    #             data['CRE'].append(v)
+    #         for t, v in time_dict[1].items():
+    #             data['Shannon'].append(v)
+    #         for _, v in sorted([(k, v) for k, v in raw_data.items()], key=lambda x: x[0]):
+    #             for k1, v1 in v.items():
+    #                 data[k1].append(v1)
+    #             data['Vol'].append(v['L']*v['B']*v['T']*v['Cb'])
+    #         df = pd.DataFrame(data)
+    #         df['Vol Rank'] = df['Vol'].rank(ascending = False)
+    #         df['Vol Rank'] = df['Vol Rank'].astype('int64')
+    #         df['Case'] = "Case {}".format(case)
+    #         tdfs.append(df)
+    #     tdf = pd.concat(tdfs, ignore_index=True, sort=False)
+    #     tdf['Trial'] = trial
+    #     dfs.append(tdf)
+    # df = pd.concat(dfs, ignore_index=True, sort=False)
+    #
+    # save_pickle(df, 'cases24_ensemble_data_n={}'.format(num_trials))
 
-    num_trials = 250
-    random_CRE_target_value_entropy_time_series = {}
-    random_shannon_target_value_entropy_time_series = {}
-    random_target_value_entropy_time_series = {}
-    data_dict = {}
-    for i in range(num_trials):
-        logging.info('-----------------------------------------------')
-        logging.info('              Iteration {} of {}'.format(i+1, num_trials))
-        logging.info('-----------------------------------------------')
 
-        raw_data.randomize()
 
-        case = case_run_manager(
-            cases = [2,4],
-            data = raw_data,
-            #T = 5,
-            do_rework = False,
-            save_entropy_time_series = False,
-            save_network = False,
-            save_histograms = False,
-            save_comparisons = False,
+
+    df = get_pickle('cases24_ensemble_data_n=2200')
+    #print(df)
+
+    df['Shifted Time'] = df.apply(shift_time, axis=1)
+
+    for i in range(2,16):
+
+        trials = df[(df['Shifted Time'] == i) & (df['Vol Rank'] == 1) & (df['Case'] == 'Case 2')]['Trial']
+
+        plt_df = pd.concat(
+            [df[df['Trial'] == t] for t in trials],
+            ignore_index = True, sort = False
+        )
+
+
+        plt.figure()
+        sns.set()
+        sns.set_style('white')
+        sns.lineplot(
+            x = 'Shifted Time',
+            y = 'CRE',
+            hue = 'Case',
+            ci = 100,
+            n_boot = 1000,
+            data = plt_df
+        )
+        sns.lineplot(
+            x = 'Shifted Time',
+            y = 'CRE',
+            hue = 'Case',
+            units = 'Trial',
+            estimator = None,
+            data = plt_df,
             **{
-                'hist_kwargs': {
-                    'bins': np.linspace(1000,15000,51), # min, max, n_bins. MUST MATCH RANGE!
-                    'range': (1000,15000),
-                    'density': True,
-                    'cumulative': False
-                },
-
-                'plot_kwargs': {
-                    'hist': True,
-                    'kde': True,
-                    'norm_hist': True
-                }
+                'linewidth' : 0,
+                'marker': '.'
             }
         )
 
-        # random_CRE_target_value_entropy_time_series[i] = {
-        #     k:v.target_value_CRE_entropy_time_series for k,v in case.items()
-        # }
-        #
-        # #print(random_CRE_target_value_entropy_time_series)
-        #
-        # random_shannon_target_value_entropy_time_series[i] = {
-        #     k:v.target_value_shannon_entropy_time_series for k,v in case.items()
-        # }
-
-        random_target_value_entropy_time_series[i] = {
-            k:(deepcopy(v.target_value_CRE_entropy_time_series), deepcopy(v.target_value_shannon_entropy_time_series))
-            for k,v in case.items()
-        }
-
-        data_dict[i] = deepcopy(raw_data.data)
-
-    # Create pandas dataframe to hold the above dicts, for plotting with the errorbands
-
-    dfs = []
-    for trial, case_dict in random_target_value_entropy_time_series.items():
-        tdfs = []
-        raw_data = data_dict[trial]
-        for case, time_dict in case_dict.items():
-            data = {'Time': [], 'CRE': [], 'Shannon': [], 'Ship': [], 'L': [], 'B':[], 'T':[], 'Cb':[], 'Vol': []}
-            for t, v in time_dict[0].items():
-                data['Time'].append(t)
-                data['CRE'].append(v)
-            for t, v in time_dict[1].items():
-                data['Shannon'].append(v)
-            for _, v in sorted([(k, v) for k, v in raw_data.items()], key=lambda x: x[0]):
-                for k1, v1 in v.items():
-                    data[k1].append(v1)
-                data['Vol'].append(v['L']*v['B']*v['T']*v['Cb'])
-            df = pd.DataFrame(data)
-            df['Vol Rank'] = df['Vol'].rank(ascending = False)
-            df['Vol Rank'] = df['Vol Rank'].astype('int64')
-            df['Case'] = "Case {}".format(case)
-            tdfs.append(df)
-        tdf = pd.concat(tdfs, ignore_index=True, sort=False)
-        tdf['Trial'] = trial
-        dfs.append(tdf)
-    df = pd.concat(dfs, ignore_index=True, sort=False)
-
-    save_pickle(df, 'cases24_ensemble_data_n=250')
-
-
-    # df = get_pickle('cases24_ensemble_data_n=100')
-    #
-    # df['Shifted Time'] = df.apply(shift_time, axis=1)
-    #
-    #
-    # for i in range(1,15):
-    #
-    #     trials = df[(df['Shifted Time'] == i) & (df['Vol Rank'] == 1) & (df['Case'] == 'Case 2')]['Trial']
-    #
-    #     plt_df = pd.concat(
-    #     [df[df['Trial'] == t] for t in trials],
-    #     ignore_index = True, sort = False
-    #     )
-    #
-    #     plt.figure()
-    #     sns.set()
-    #     sns.set_style('white')
-    #     sns.lineplot(
-    #         x = 'Shifted Time',
-    #         y = 'CRE',
-    #         hue = 'Case',
-    #         ci = 100,
-    #         n_boot = 10000,
-    #         data = plt_df
-    #     )
-    #     sns.lineplot(
-    #         x = 'Shifted Time',
-    #         y = 'CRE',
-    #         hue = 'Case',
-    #         units = 'Trial',
-    #         estimator = None,
-    #         data = plt_df,
-    #         **{
-    #             'linewidth' : 0,
-    #             'marker': '.'
-    #         }
-    #     )
-    #     sns.despine()
-    #     handles, labels = plt.gca().get_legend_handles_labels()
-    #     plt.gca().legend(handles=handles[1:3], labels=labels[1:3])
-    #     plt.xlabel('Time Steps from initial')
-    #     plt.ylabel('Cumulative Residual Entropy (CRE)')
-    #     plt.title('CRE Time Series Enseble - Outlier (t = {})'.format(i))
-    #     axes = plt.gca()
-    #     axes.set_xlim([0,None])
-    #     axes.set_ylim([None,6500])
-    #     plt.savefig('../figures\\' + 'CRE_Ensemble_Time_Series_t={}.png'.format(i))
-    #     #plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-
-
+        sns.despine()
+        handles, labels = plt.gca().get_legend_handles_labels()
+        plt.gca().legend(handles=handles[1:3], labels=labels[1:3])
+        plt.xlabel('Time Step')
+        plt.ylabel('Target Value Entropy (TVE)')
+        #plt.title('CRE Time Series Ensemble - Outlier (t = {})'.format(i))
+        axes = plt.gca()
+        axes.set_xlim([0,None])
+        axes.set_ylim([None,6500])
+        locs, labels = plt.xticks()
+        plt.xticks(np.arange(0, 16, step=1))
+        plt.savefig('../figures\\' + 'CRE_Ensemble_Time_Series_t={}.png'.format(i))
+        #plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
 
 
 
